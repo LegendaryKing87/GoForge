@@ -1,4 +1,7 @@
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Styling;
 using AvaloniaEdit.CodeCompletion;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
@@ -15,7 +18,15 @@ public sealed class GoCompletionData : ICompletionData
         Text = item.Label;
         _insert = item.InsertText;
         var detail = string.IsNullOrWhiteSpace(item.Detail) ? "" : "    " + item.Detail;
-        Content = $"{Glyph(item.Kind)}  {item.Label}{detail}";
+        // Use an explicit TextBlock with a theme-aware Foreground.
+        // A plain string Content often renders invisible under AvaloniaEdit's
+        // Fluent CompletionList template (no TextBlock.Foreground inheritance).
+        var dark = Application.Current?.ActualThemeVariant == ThemeVariant.Dark;
+        Content = new TextBlock
+        {
+            Text = $"{Glyph(item.Kind)}  {item.Label}{detail}",
+            Foreground = new SolidColorBrush(Color.Parse(dark ? "#D4D4D4" : "#1F1F1F"))
+        };
         Description = string.IsNullOrWhiteSpace(item.Doc) ? item.Detail : item.Doc;
     }
 
