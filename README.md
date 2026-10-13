@@ -42,22 +42,22 @@ dotnet publish -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=tru
 
 ## Shortcuts
 
-| Action | Keys |
-|---|---|
-| New / Open file / Open folder | Ctrl+N / Ctrl+O / Ctrl+Shift+O |
-| Save / Save As / Save All | Ctrl+S / Ctrl+Shift+S / Ctrl+Alt+S |
-| Close tab | Ctrl+W |
-| Quick Open | Ctrl+P |
-| Find / Find in Files / Go to Line | Ctrl+F / Ctrl+Shift+F / Ctrl+G |
-| Run / Run file / Stop | F5 / Ctrl+F5 / Shift+F5 |
-| Build / Test / Test package | Ctrl+Shift+B / Ctrl+T / Ctrl+Shift+T |
-| Go to Definition / References | F12 / Shift+F12 |
-| Completion | Ctrl+Space (also after typing `.`) |
-| Format document | Shift+Alt+F |
+| Action                                          | Keys                                              |
+| ----------------------------------------------- | ------------------------------------------------- |
+| New / Open file / Open folder                   | Ctrl+N / Ctrl+O / Ctrl+Shift+O                    |
+| Save / Save As / Save All                       | Ctrl+S / Ctrl+Shift+S / Ctrl+Alt+S                |
+| Close tab                                       | Ctrl+W                                            |
+| Quick Open                                      | Ctrl+P                                            |
+| Find / Find in Files / Go to Line               | Ctrl+F / Ctrl+Shift+F / Ctrl+G                    |
+| Run / Run file / Stop                           | F5 / Ctrl+F5 / Shift+F5                           |
+| Build / Test / Test package                     | Ctrl+Shift+B / Ctrl+T / Ctrl+Shift+T              |
+| Go to Definition / References                   | F12 / Shift+F12                                   |
+| Completion                                      | Ctrl+Space (also after typing `.`)                |
+| Format document                                 | Shift+Alt+F                                       |
 | Toggle comment / duplicate / delete / move line | Ctrl+/ / Ctrl+D / Ctrl+Shift+K / Alt+Up, Alt+Down |
-| Toggle Explorer / Output panel | Ctrl+B / Ctrl+J |
-| Zoom in / out / reset | Ctrl+= / Ctrl+- / Ctrl+0 |
-| Settings | Ctrl+, |
+| Toggle Explorer / Output panel                  | Ctrl+B / Ctrl+J                                   |
+| Zoom in / out / reset                           | Ctrl+= / Ctrl+- / Ctrl+0                          |
+| Settings                                        | Ctrl+,                                            |
 
 ## Project layout
 
@@ -81,3 +81,23 @@ Git integration is also not included.
 
 If a NuGet version in `GoForge.csproj` is unavailable on your feed, bump `Avalonia*` and
 `Avalonia.AvaloniaEdit` to the latest 11.x release.
+
+
+
+## License / Warranty
+
+GoForge: A Go IDE built with **.NET 8**, **Avalonia 11** and **AvaloniaEdit**.
+Copyright (C) 2026  Joel R. Frank - @LegendaryKing87
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
