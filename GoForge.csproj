@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>GoForge</AssemblyName>
+    <RootNamespace>GoForge</RootNamespace>
+    <Version>1.0.0</Version>
+    <Product>GoForge</Product>
+    <Authors>LegendaryKing87</Authors>
+    <Description>GoForge - a Go IDE built with Avalonia and AvaloniaEdit</Description>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.1.0" />
+  </ItemGroup>
+
+</Project>

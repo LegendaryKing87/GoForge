@@ -1,0 +1,83 @@
+# GoForge
+
+A Go IDE built with **.NET 8**, **Avalonia 11** and **AvaloniaEdit**.
+
+Created by (Github: @LegendaryKing87) — https://github.com/LegendaryKing87
+
+## Requirements
+
+- .NET SDK 8
+- Go (https://go.dev/dl/) on your PATH, or set its location in Settings
+- Optional but recommended: `gopls` — install from inside the IDE with **Go ▸ Install / Update gopls**
+
+## Run
+
+```
+dotnet restore
+dotnet run
+```
+
+Open a folder or file directly: `dotnet run -- C:\path\to\project`
+
+## Publish a standalone build
+
+```
+dotnet publish -c Release -r win-x64   --self-contained -p:PublishSingleFile=true
+dotnet publish -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true
+dotnet publish -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true
+```
+
+## Features
+
+- Multi-tab editor (AvaloniaEdit) with Go syntax highlighting (dark and light palettes), line numbers,
+  auto-indent, auto-closing brackets/quotes, find (built-in search panel), Ctrl+wheel zoom
+- Explorer tree with create / rename / delete / reveal / copy path, Quick Open (Ctrl+P), Find in Files
+- gopls integration over LSP: completion, hover, diagnostics (squiggles + Problems panel),
+  go to definition (F12 / Ctrl+click), find references, document outline, format document
+- Go tooling: run, run file, build, build executable, install, test (all / package / coverage / race),
+  vet, mod init / tidy, get, generate, fmt — output streams live, `file.go:12:3` lines are clickable,
+  compiler errors feed the Problems panel, stdin box sends input to the running program
+- Format on save (gopls, falling back to gofmt), save-before-run, session restore, recent folders
+- Settings dialog (theme, font, tab width, word wrap, whitespace, tool paths) and an About dialog
+
+## Shortcuts
+
+| Action | Keys |
+|---|---|
+| New / Open file / Open folder | Ctrl+N / Ctrl+O / Ctrl+Shift+O |
+| Save / Save As / Save All | Ctrl+S / Ctrl+Shift+S / Ctrl+Alt+S |
+| Close tab | Ctrl+W |
+| Quick Open | Ctrl+P |
+| Find / Find in Files / Go to Line | Ctrl+F / Ctrl+Shift+F / Ctrl+G |
+| Run / Run file / Stop | F5 / Ctrl+F5 / Shift+F5 |
+| Build / Test / Test package | Ctrl+Shift+B / Ctrl+T / Ctrl+Shift+T |
+| Go to Definition / References | F12 / Shift+F12 |
+| Completion | Ctrl+Space (also after typing `.`) |
+| Format document | Shift+Alt+F |
+| Toggle comment / duplicate / delete / move line | Ctrl+/ / Ctrl+D / Ctrl+Shift+K / Alt+Up, Alt+Down |
+| Toggle Explorer / Output panel | Ctrl+B / Ctrl+J |
+| Zoom in / out / reset | Ctrl+= / Ctrl+- / Ctrl+0 |
+| Settings | Ctrl+, |
+
+## Project layout
+
+```
+GoForge.csproj      Program.cs   App.cs
+Models/             settings + data items
+Services/           GoToolchain (go/gofmt discovery, process runner), LspClient (gopls), PathUtil
+Editing/            EditorTab, Go highlighting, diagnostics renderer, completion data
+Dialogs/            About, Settings, Quick Open, message/prompt helpers
+UI/                 MainWindow (layout + menus), .Files, .Go, .Lsp partials
+```
+
+The UI is built in code (no XAML), so there is nothing to keep in sync with generated fields.
+
+## Not included
+
+A debugger (Delve), refactoring such as rename-symbol across files, and snippet completion.
+Git integration is also not included.
+
+## Notes
+
+If a NuGet version in `GoForge.csproj` is unavailable on your feed, bump `Avalonia*` and
+`Avalonia.AvaloniaEdit` to the latest 11.x release.
