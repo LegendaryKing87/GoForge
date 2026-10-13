@@ -22,12 +22,18 @@ public sealed class GoCompletionData : ICompletionData
         // A plain string Content often renders invisible under AvaloniaEdit's
         // Fluent CompletionList template (no TextBlock.Foreground inheritance).
         var dark = Application.Current?.ActualThemeVariant == ThemeVariant.Dark;
+        var fg = new SolidColorBrush(Color.Parse(dark ? "#D4D4D4" : "#1F1F1F"));
         Content = new TextBlock
         {
             Text = $"{Glyph(item.Kind)}  {item.Label}{detail}",
-            Foreground = new SolidColorBrush(Color.Parse(dark ? "#D4D4D4" : "#1F1F1F"))
+            Foreground = fg
         };
-        Description = string.IsNullOrWhiteSpace(item.Doc) ? item.Detail : item.Doc;
+
+        // the documentation tooltip has the same problem as the list text, so give it an explicit colour too
+        var doc = string.IsNullOrWhiteSpace(item.Doc) ? item.Detail : item.Doc;
+        Description = string.IsNullOrWhiteSpace(doc)
+            ? null
+            : new TextBlock { Text = doc, Foreground = fg, TextWrapping = TextWrapping.Wrap, MaxWidth = 520 };
     }
 
     public IImage? Image => null;

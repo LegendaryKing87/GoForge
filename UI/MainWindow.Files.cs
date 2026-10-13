@@ -24,6 +24,7 @@ public partial class MainWindow
     async Task OnOpenedAsync()
     {
         _hoverTimer.Tick += OnHoverTick;
+        _completionTimer.Tick += OnCompletionTimer;
 
         var goExe = GoToolchain.FindExecutable("go", _s.GoPath);
         await Task.Run(() => GoToolchain.DetectEnv(goExe));
@@ -119,10 +120,7 @@ public partial class MainWindow
         var ed = tab.Editor;
         ed.TextArea.Caret.PositionChanged += (_, _) => { if (ReferenceEquals(Current, tab)) UpdateStatus(); };
         ed.Document.TextChanged += (_, _) => { if (ReferenceEquals(Current, tab)) UpdateTitle(); };
-        ed.TextArea.TextEntered += (_, e) =>
-        {
-            if (e.Text == "." && tab.IsGo) Fire(() => ShowCompletionAsync(tab, false));
-        };
+        ed.TextArea.TextEntered += (_, e) => OnTextEnteredForCompletion(tab, e.Text);
 
         ed.AddHandler(PointerWheelChangedEvent, (object? _, PointerWheelEventArgs e) =>
         {
@@ -156,7 +154,7 @@ public partial class MainWindow
 
         if (_lsp != null && tab.IsGo && tab.FilePath != null)
         {
-            _lsp.DidOpen(tab.FilePath, ed.Text, tab.Version);
+            LspOpenDoc(tab);
             tab.LspOpen = true;
         }
         UpdateWelcome();
@@ -165,7 +163,7 @@ public partial class MainWindow
     void OnTextSettled(EditorTab tab)
     {
         if (_lsp != null && tab.LspOpen && tab.FilePath != null)
-            _lsp.DidChange(tab.FilePath, tab.Editor.Text, tab.Version);
+            LspSync(tab);
         if (ReferenceEquals(Current, tab)) Fire(RefreshOutlineAsync);
     }
 
@@ -302,7 +300,7 @@ public partial class MainWindow
         tab.MarkSaved();
         if (_lsp != null && tab.LspOpen)
         {
-            _lsp.DidChange(tab.FilePath, tab.Editor.Text, tab.Version);
+            LspSync(tab);
             _lsp.DidSave(tab.FilePath);
         }
         if (ReferenceEquals(Current, tab)) UpdateTitle();
@@ -334,7 +332,7 @@ public partial class MainWindow
 
         if (_lsp != null && tab.IsGo && tab.FilePath != null)
         {
-            _lsp.DidOpen(tab.FilePath, tab.Editor.Text, tab.Version);
+            LspOpenDoc(tab);
             tab.LspOpen = true;
         }
         RefreshTree();
@@ -622,7 +620,7 @@ public partial class MainWindow
             t.LspOpen = false;
             if (_lsp != null && t.IsGo)
             {
-                _lsp.DidOpen(t.FilePath!, t.Editor.Text, t.Version);
+                LspOpenDoc(t);
                 t.LspOpen = true;
             }
         }

@@ -36,6 +36,8 @@ public sealed class EditorTab
     public bool IsDirty { get; private set; }
     public int Version { get; private set; } = 1;
     public bool LspOpen { get; set; }
+    /// <summary>Last document version sent to gopls, so unchanged text is never re-sent.</summary>
+    public int SentVersion { get; set; }
 
     public event Action<EditorTab>? CloseRequested;
     /// <summary>Fires ~350ms after the last edit - used to sync with gopls and refresh the outline.</summary>

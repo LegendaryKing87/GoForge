@@ -18,6 +18,9 @@ public partial class MainWindow
     int _outlineToken;
     CompletionWindow? _completion;
 
+    readonly DispatcherTimer _completionTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
+    EditorTab? _completionTab;
+
     readonly DispatcherTimer _hoverTimer = new() { Interval = TimeSpan.FromMilliseconds(550) };
     EditorTab? _hoverTab;
     Point _hoverPoint;
@@ -25,6 +28,30 @@ public partial class MainWindow
     // ------------------------------------------------------------ lifecycle
 
     void SetLspStatus(string text) => _stGopls.Text = text;
+
+    async void FlashGopls(string message)
+    {
+        _stGopls.Text = message;
+        await Task.Delay(3500);
+        if (_lsp != null && _stGopls.Text == message) _stGopls.Text = "gopls: ready";
+    }
+
+    /// <summary>Sends the document to gopls (didOpen) and remembers which version it has.</summary>
+    void LspOpenDoc(EditorTab t)
+    {
+        if (_lsp == null || t.FilePath == null) return;
+        _lsp.DidOpen(t.FilePath, t.Editor.Text, t.Version);
+        t.SentVersion = t.Version;
+        t.LspOpen = true;
+    }
+
+    /// <summary>Pushes pending edits to gopls, but only when the text really changed since the last send.</summary>
+    void LspSync(EditorTab t)
+    {
+        if (_lsp == null || !t.LspOpen || t.FilePath == null || t.SentVersion == t.Version) return;
+        _lsp.DidChange(t.FilePath, t.Editor.Text, t.Version);
+        t.SentVersion = t.Version;
+    }
 
     async Task StartLspAsync()
     {
@@ -60,6 +87,12 @@ public partial class MainWindow
             var client = new LspClient();
             client.DiagnosticsPublished += (path, list) => Dispatcher.UIThread.Post(() => OnDiagnostics(path, list));
             client.Message += msg => Dispatcher.UIThread.Post(() => AppendLine(msg, Kind.Info));
+            client.Progress += text => Dispatcher.UIThread.Post(() =>
+            {
+                if (!ReferenceEquals(_lsp, client) && !_lspStarting) return;
+                if (text == null) SetLspStatus("gopls: ready");
+                else SetLspStatus("gopls: " + (text.Length > 70 ? text.Substring(0, 70) + "…" : text));
+            });
             client.Exited += () => Dispatcher.UIThread.Post(() =>
             {
                 if (!ReferenceEquals(_lsp, client)) return;
@@ -79,7 +112,7 @@ public partial class MainWindow
             SetLspStatus("gopls: ready");
             foreach (var t in _editors.Where(e => e.IsGo && e.FilePath != null))
             {
-                client.DidOpen(t.FilePath!, t.Editor.Text, t.Version);
+                LspOpenDoc(t);
                 t.LspOpen = true;
             }
             await RefreshOutlineAsync();
@@ -122,18 +155,73 @@ public partial class MainWindow
 
     // ------------------------------------------------------------ completion
 
+    void OnTextEnteredForCompletion(EditorTab tab, string? text)
+    {
+        if (!tab.IsGo || string.IsNullOrEmpty(text) || text.Length != 1) return;
+        char c = text[0];
+
+        if (c == '.')
+        {
+            _completionTimer.Stop();
+            Fire(() => ShowCompletionAsync(tab, false));
+            return;
+        }
+        if (!EditorTab.IsIdent(c)) return;
+
+        // as-you-type: pop up once at least two identifier characters were typed
+        var doc = tab.Editor.Document;
+        int caret = tab.Editor.CaretOffset;
+        int n = 0;
+        while (n < 2 && caret - n > 0 && EditorTab.IsIdent(doc.GetCharAt(caret - n - 1))) n++;
+        if (n < 2) return;
+
+        _completionTab = tab;
+        _completionTimer.Stop();
+        _completionTimer.Start();
+    }
+
+    void OnCompletionTimer(object? sender, EventArgs e)
+    {
+        _completionTimer.Stop();
+        var tab = _completionTab;
+        if (tab == null || !ReferenceEquals(Current, tab) || _completion != null) return;
+        Fire(() => ShowCompletionAsync(tab, false));
+    }
+
     async Task ShowCompletionAsync(EditorTab? tab, bool manual)
     {
-        if (tab == null || _lsp == null || !tab.LspOpen || tab.FilePath == null) return;
+        if (tab == null || !tab.IsGo) return;
+        if (_lsp == null || !tab.LspOpen || tab.FilePath == null)
+        {
+            if (manual) FlashGopls("gopls: not running, completion unavailable");
+            return;
+        }
+
         var ed = tab.Editor;
+        LspSync(tab);
 
-        _lsp.DidChange(tab.FilePath, ed.Text, tab.Version);
-        var loc = ed.Document.GetLocation(ed.CaretOffset);
+        int requestCaret = ed.CaretOffset;
+        var loc = ed.Document.GetLocation(requestCaret);
+        int requestLine = loc.Line;
         var items = await _lsp.CompletionAsync(tab.FilePath, loc.Line - 1, loc.Column - 1);
-        if (items.Count == 0 || !ReferenceEquals(Current, tab)) return;
 
+        if (!ReferenceEquals(Current, tab)) return;
         var doc = ed.Document;
         int caret = Math.Min(ed.CaretOffset, doc.TextLength);
+        if (doc.GetLocation(caret).Line != requestLine) return; // the user moved on
+
+        if (items.Count == 0)
+        {
+            if (manual) FlashGopls("gopls: no completions here (still indexing?)");
+            return;
+        }
+
+        if (!manual && caret > 0)
+        {
+            var prev = doc.GetCharAt(caret - 1);
+            if (!EditorTab.IsIdent(prev) && prev != '.') return; // typed something else meanwhile
+        }
+
         int start = caret;
         while (start > 0 && EditorTab.IsIdent(doc.GetCharAt(start - 1))) start--;
 
@@ -228,7 +316,7 @@ public partial class MainWindow
             return;
         }
 
-        _lsp.DidChange(tab.FilePath, tab.Editor.Text, tab.Version);
+        LspSync(tab);
         var locs = await _lsp.DefinitionAsync(tab.FilePath, line0, col0);
         if (locs.Count == 0)
         {
@@ -262,7 +350,7 @@ public partial class MainWindow
 
         var word = t.WordAt(t.Editor.CaretOffset);
         var loc = t.Editor.Document.GetLocation(t.Editor.CaretOffset);
-        _lsp.DidChange(t.FilePath, t.Editor.Text, t.Version);
+        LspSync(t);
         var refs = await _lsp.ReferencesAsync(t.FilePath, loc.Line - 1, loc.Column - 1);
         var files = refs.Select(r => r.FilePath).Distinct(PathUtil.Cmp).Count();
         ShowResults(ToResults(refs), $"{refs.Count} reference(s) to '{word}' in {files} file(s)");
@@ -318,7 +406,7 @@ public partial class MainWindow
 
         if (_lsp != null && tab.LspOpen && tab.FilePath != null)
         {
-            _lsp.DidChange(tab.FilePath, tab.Editor.Text, tab.Version);
+            LspSync(tab);
             int version = tab.Version;
             var edits = await _lsp.FormattingAsync(tab.FilePath, _s.TabSize);
             if (edits != null)

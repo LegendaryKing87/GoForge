@@ -22,6 +22,8 @@ public sealed class LspClient : IDisposable
     public event Action<string, List<LspDiagnostic>>? DiagnosticsPublished;
     /// <summary>Raised from a background thread with server messages (window/showMessage, stderr).</summary>
     public event Action<string>? Message;
+    /// <summary>Work-done progress from gopls ("Loading packages…"); null when it finished.</summary>
+    public event Action<string?>? Progress;
     public event Action? Exited;
 
     // ---------------------------------------------------------------- lifecycle
@@ -233,7 +235,7 @@ public sealed class LspClient : IDisposable
 
     void Notify(string method, JsonNode? @params) => _ = NotifyAsync(method, @params);
 
-    async Task<JsonNode?> RequestAsync(string method, JsonNode? @params, int timeoutMs = 15000)
+    async Task<JsonNode?> RequestAsync(string method, JsonNode? @params, int timeoutMs = 60000)
     {
         if (!IsRunning) return null;
         int id = Interlocked.Increment(ref _nextId);
@@ -284,6 +286,17 @@ public sealed class LspClient : IDisposable
             {
                 case "textDocument/publishDiagnostics":
                     HandleDiagnostics(obj["params"] as JsonObject);
+                    break;
+                case "$/progress":
+                    var pv = obj["params"]?["value"] as JsonObject;
+                    var pk = Str(pv?["kind"]);
+                    if (pk == "end") Progress?.Invoke(null);
+                    else if (pk != null)
+                    {
+                        var ptxt = string.Join(" ", new[] { Str(pv?["title"]), Str(pv?["message"]) }
+                            .Where(x => !string.IsNullOrEmpty(x)));
+                        Progress?.Invoke(ptxt.Length > 0 ? ptxt : "working…");
+                    }
                     break;
                 case "window/showMessage":
                 case "window/logMessage":

@@ -10,7 +10,10 @@
     <RootNamespace>GoForge</RootNamespace>
     <Version>1.0.0</Version>
     <Product>GoForge</Product>
-    <Authors>LegendaryKing87</Authors>
+    <Authors>Joel R. Frank (@LegendaryKing87)</Authors>
+    <Company>PrinTech Solutions</Company>
+    <Copyright>Copyright (C) 2026 Joel R. Frank</Copyright>
+    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <Description>GoForge - a Go IDE built with Avalonia and AvaloniaEdit</Description>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
