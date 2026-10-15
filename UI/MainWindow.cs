@@ -85,6 +85,7 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
         Opened += async (_, _) => await OnOpenedAsync();
         Closing += OnClosing;
+        Activated += (_, _) => Fire(RefreshGitAsync);
     }
 
     // ------------------------------------------------------------ helpers
@@ -117,6 +118,7 @@ public partial class MainWindow : Window
 
     void OnKeyDownTunnel(object? sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape) HideSignature();
         foreach (var (gesture, action) in _shortcuts)
         {
             if (gesture.Matches(e))
@@ -194,6 +196,9 @@ public partial class MainWindow : Window
         edit.Items.Add(MI("Move Line Dow_n", () => WithEditor(t => t.MoveLines(false)), G(Key.Down, Alt)));
         edit.Items.Add(new Separator());
         edit.Items.Add(MI("_Format Document", () => Fire(FormatCurrentAsync), G(Key.F, Shift | Alt)));
+        edit.Items.Add(MI("Organize _Imports", () => Fire(OrganizeImportsCurrentAsync), G(Key.O, Shift | Alt)));
+        edit.Items.Add(MI("Quick _Fix…", () => Fire(QuickFixAsync), G(Key.OemPeriod, Ctrl)));
+        edit.Items.Add(MI("_Rename Symbol…", () => Fire(RenameSymbolAsync), G(Key.F2)));
         edit.Items.Add(MI("Trigger Co_mpletion", () => Fire(() => ShowCompletionAsync(Current, true)), G(Key.Space, Ctrl)));
         menu.Items.Add(edit);
 
@@ -227,9 +232,25 @@ public partial class MainWindow : Window
         go.Items.Add(MI("Format All (go fmt ./...)", () => Fire(FmtAllAsync)));
         go.Items.Add(new Separator());
         go.Items.Add(MI("Install / Update gop_ls", () => Fire(InstallGoplsAsync)));
+        go.Items.Add(MI("Install _Delve (debugger)", () => Fire(InstallDelveAsync)));
         go.Items.Add(MI("Restart gopls", () => Fire(StartLspAsync)));
         go.Items.Add(MI("Show Go _Version and Env", () => Fire(ShowGoEnvAsync)));
         menu.Items.Add(go);
+
+        // ---- Debug
+        var debug = new MenuItem { Header = "_Debug" };
+        debug.Items.Add(MI("_Start / Continue", () => Fire(StartDebugAsync), G(Key.F6)));
+        debug.Items.Add(MI("St_op Debugging", () => Fire(StopDebugAsync), G(Key.F6, Shift)));
+        debug.Items.Add(new Separator());
+        debug.Items.Add(MI("Step _Over", () => Fire(() => DebugStepAsync("next")), G(Key.F10)));
+        debug.Items.Add(MI("Step _Into", () => Fire(() => DebugStepAsync("stepIn")), G(Key.F11)));
+        debug.Items.Add(MI("Step Ou_t", () => Fire(() => DebugStepAsync("stepOut")), G(Key.F11, Shift)));
+        debug.Items.Add(new Separator());
+        debug.Items.Add(MI("Toggle _Breakpoint", ToggleBreakpointAtCaret, G(Key.F9)));
+        debug.Items.Add(MI("_Clear All Breakpoints", ClearAllBreakpoints));
+        debug.Items.Add(new Separator());
+        debug.Items.Add(MI("Install _Delve", () => Fire(InstallDelveAsync)));
+        menu.Items.Add(debug);
 
         // ---- View
         var view = new MenuItem { Header = "_View" };
@@ -263,10 +284,12 @@ public partial class MainWindow : Window
         _runBtn.Classes.Add("accent");
         _stopBtn = ToolButton("■  Stop", StopRun, "Stop the running process (Shift+F5)");
         _stopBtn.IsEnabled = false;
+        _debugBtn = ToolButton("Debug", () => Fire(StartDebugAsync), "Start debugging with Delve (F6)");
 
         var bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(8, 4) };
         bar.Children.Add(_runBtn);
         bar.Children.Add(_stopBtn);
+        bar.Children.Add(_debugBtn);
         bar.Children.Add(ToolButton("Build", () => Fire(BuildAllAsync), "go build ./... (Ctrl+Shift+B)"));
         bar.Children.Add(ToolButton("Test", () => Fire(TestAllAsync), "go test ./... (Ctrl+T)"));
         bar.Children.Add(ToolButton("Vet", () => Fire(VetAsync), "go vet ./..."));
@@ -299,13 +322,14 @@ public partial class MainWindow : Window
         left.Children.Add(_stGopls);
         left.Children.Add(_stGo);
         left.Children.Add(_stDiag);
+        left.Children.Add(_stGit);
 
         var right = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 18 };
         right.Children.Add(_stPos);
         right.Children.Add(_stLang);
         right.Children.Add(new TextBlock { Text = "UTF-8" });
 
-        foreach (var tb in new[] { _stGopls, _stGo, _stDiag, _stPos, _stLang })
+        foreach (var tb in new[] { _stGopls, _stGo, _stDiag, _stGit, _stPos, _stLang })
         {
             tb.Foreground = Brushes.White;
             tb.FontSize = 12;
@@ -604,7 +628,9 @@ public partial class MainWindow : Window
         _searchTab = new TabItem { Header = "Search / References", Content = searchDock, FontSize = 12 };
         _bottomTabs.Items.Add(_outputTab);
         _bottomTabs.Items.Add(_problemsTab);
+        _debugTab = new TabItem { Header = "Debug", Content = BuildDebugPane(), FontSize = 12 };
         _bottomTabs.Items.Add(_searchTab);
+        _bottomTabs.Items.Add(_debugTab);
         return _bottomTabs;
     }
 
@@ -730,6 +756,7 @@ public partial class MainWindow : Window
 
     void OnActiveTabChanged()
     {
+        HideSignature();
         UpdateStatus();
         UpdateTitle();
         Fire(RefreshOutlineAsync);

@@ -14,8 +14,10 @@ public sealed class AppSettings
     public bool SaveBeforeRun { get; set; } = true;
     public bool AutoCloseBrackets { get; set; } = true;
     public bool UseGopls { get; set; } = true;
+    public bool OrganizeImportsOnSave { get; set; } = true;
     public string GoPath { get; set; } = "";
     public string GoplsPath { get; set; } = "";
+    public string DlvPath { get; set; } = "";
 
     public string? LastFolder { get; set; }
     public List<string> RecentFolders { get; set; } = new();
@@ -23,6 +25,8 @@ public sealed class AppSettings
     public double WindowWidth { get; set; } = 1280;
     public double WindowHeight { get; set; } = 800;
     public bool Maximized { get; set; }
+    /// <summary>Breakpoints per file (1-based line numbers).</summary>
+    public Dictionary<string, List<int>> Breakpoints { get; set; } = new();
 
     public bool IsDark => !string.Equals(Theme, "Light", StringComparison.OrdinalIgnoreCase);
 }

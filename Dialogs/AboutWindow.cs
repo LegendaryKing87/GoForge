@@ -107,7 +107,7 @@ public sealed class AboutWindow : Window
         root.Children.Add(new Separator { Margin = new Thickness(0, 4) });
         root.Children.Add(new TextBlock
         {
-            Text = "Created by Joel R. Frank (Github: @LegendaryKing87) - PrinTech Solutions\nLicense: GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3.0",
+            Text = "Created by Joel R. Frank (Github: @LegendaryKing87) - PrinTech Solutions\nLicense: GNU Affero General Public License v3 or later",
             TextAlignment = TextAlignment.Center,
             FontWeight = FontWeight.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Center,

@@ -279,6 +279,14 @@ public partial class MainWindow
             var parts = new List<string>();
             parts.AddRange(tab.DiagnosticsAt(line1 - 1, col1 - 1).Select(m => "⚠ " + m));
 
+            // while the debugger is paused, show the value of the identifier under the pointer first
+            if (_dap != null && _dbgPaused && offset < doc.TextLength && EditorTab.IsIdent(doc.GetCharAt(offset)))
+            {
+                var word = tab.WordAt(offset);
+                var value = await EvaluateAsync(word);
+                if (value != null) parts.Insert(0, $"{word} = {value}");
+            }
+
             if (_lsp != null && tab.LspOpen && tab.FilePath != null
                 && offset < doc.TextLength && EditorTab.IsIdent(doc.GetCharAt(offset)))
             {

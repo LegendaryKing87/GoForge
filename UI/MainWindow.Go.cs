@@ -143,12 +143,18 @@ public partial class MainWindow
 
     void SetRunning(bool running)
     {
-        _runBtn.IsEnabled = !running;
-        _stopBtn.IsEnabled = running;
+        _runBtn.IsEnabled = !running && _dap == null;
+        _debugBtn.IsEnabled = !running && _dap == null;
+        _stopBtn.IsEnabled = running || _dap != null;
     }
 
     void StopRun()
     {
+        if (_dap != null)
+        {
+            Fire(StopDebugAsync);
+            return;
+        }
         if (!_runner.IsRunning) return;
         _runner.Kill();
         AppendLine("Stop requested.", Kind.Info);
@@ -162,6 +168,13 @@ public partial class MainWindow
         {
             ShowBottom(_outputTab);
             AppendLine("A process is already running. Stop it first (Shift+F5).", Kind.Error);
+            return -1;
+        }
+
+        if (_dap != null)
+        {
+            ShowBottom(_outputTab);
+            AppendLine("A debug session is active. Stop it first (Shift+F6).", Kind.Error);
             return -1;
         }
 
@@ -204,6 +217,7 @@ public partial class MainWindow
             code == 0 ? Kind.Success : Kind.Error);
 
         RefreshTree();
+        Fire(RefreshGitAsync);
         return code;
     }
 

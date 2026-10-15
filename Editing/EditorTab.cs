@@ -31,6 +31,8 @@ public sealed class EditorTab
     public TabItem Item { get; }
     public SearchPanel Search { get; }
     public DiagnosticRenderer Diagnostics { get; }
+    public BreakpointMargin Gutter { get; } = new();
+    readonly DebugLineRenderer _debugLine = new();
 
     public string? FilePath { get; private set; }
     public bool IsDirty { get; private set; }
@@ -40,6 +42,8 @@ public sealed class EditorTab
     public int SentVersion { get; set; }
 
     public event Action<EditorTab>? CloseRequested;
+    /// <summary>The user clicked the breakpoint gutter on this 1-based line.</summary>
+    public event Action<EditorTab, int>? BreakpointClicked;
     /// <summary>Fires ~350ms after the last edit - used to sync with gopls and refresh the outline.</summary>
     public event Action<EditorTab>? TextSettled;
 
@@ -70,6 +74,10 @@ public sealed class EditorTab
         Diagnostics = new DiagnosticRenderer();
         Editor.TextArea.TextView.BackgroundRenderers.Add(Diagnostics);
         Search = SearchPanel.Install(Editor);
+
+        Editor.TextArea.LeftMargins.Insert(0, Gutter);
+        Editor.TextArea.TextView.BackgroundRenderers.Add(_debugLine);
+        Gutter.LineClicked += line => BreakpointClicked?.Invoke(this, line);
 
         var close = new Button
         {
@@ -167,6 +175,22 @@ public sealed class EditorTab
         else if (fileName == "go.mod" || fileName == "go.work" || ext == ".mod" || ext == ".work") Editor.SyntaxHighlighting = GoHighlighting.GetMod(_dark);
         else if (ext.Length == 0) Editor.SyntaxHighlighting = null;
         else Editor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinitionByExtension(ext);
+    }
+
+    public void SetBreakpoints(IEnumerable<int> lines)
+    {
+        Gutter.Lines.Clear();
+        foreach (var l in lines) Gutter.Lines.Add(l);
+        Gutter.InvalidateVisual();
+    }
+
+    /// <summary>Marks the line the debugger is stopped at (1-based); 0 clears the marker.</summary>
+    public void SetDebugLine(int line)
+    {
+        Gutter.DebugLine = line;
+        _debugLine.Line = line;
+        Gutter.InvalidateVisual();
+        Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
     }
 
     public void SetDiagnostics(List<LspDiagnostic> list)

@@ -19,6 +19,8 @@ public sealed class SettingsWindow : Window
     readonly CheckBox _saveRun = new() { Content = "Save all files before running or building" };
     readonly CheckBox _brackets = new() { Content = "Auto-close brackets and quotes" };
     readonly CheckBox _gopls = new() { Content = "Use gopls (completion, diagnostics, navigation)" };
+    readonly CheckBox _organize = new() { Content = "Organize imports on save (gopls)" };
+    readonly TextBox _dlvPath = new() { Watermark = "Auto-detect (PATH, GOPATH/bin)" };
     readonly TextBox _goPath = new() { Watermark = "Auto-detect (PATH, GOROOT, GOPATH)" };
     readonly TextBox _goplsPath = new() { Watermark = "Auto-detect (PATH, GOPATH/bin)" };
 
@@ -48,6 +50,8 @@ public sealed class SettingsWindow : Window
         _saveRun.IsChecked = settings.SaveBeforeRun;
         _brackets.IsChecked = settings.AutoCloseBrackets;
         _gopls.IsChecked = settings.UseGopls;
+        _organize.IsChecked = settings.OrganizeImportsOnSave;
+        _dlvPath.Text = settings.DlvPath;
         _goPath.Text = settings.GoPath;
         _goplsPath.Text = settings.GoplsPath;
 
@@ -64,12 +68,14 @@ public sealed class SettingsWindow : Window
         root.Children.Add(_ws);
         root.Children.Add(_brackets);
         root.Children.Add(_fmt);
+        root.Children.Add(_organize);
 
         root.Children.Add(Section("Go tooling"));
         root.Children.Add(_saveRun);
         root.Children.Add(_gopls);
         root.Children.Add(Row("go executable", _goPath));
         root.Children.Add(Row("gopls executable", _goplsPath));
+        root.Children.Add(Row("dlv (Delve) executable", _dlvPath));
 
         var ok = new Button { Content = "Save", MinWidth = 90, IsDefault = true, HorizontalContentAlignment = HorizontalAlignment.Center };
         ok.Classes.Add("accent");
@@ -123,6 +129,8 @@ public sealed class SettingsWindow : Window
         _s.SaveBeforeRun = _saveRun.IsChecked == true;
         _s.AutoCloseBrackets = _brackets.IsChecked == true;
         _s.UseGopls = _gopls.IsChecked == true;
+        _s.OrganizeImportsOnSave = _organize.IsChecked == true;
+        _s.DlvPath = _dlvPath.Text?.Trim() ?? "";
         _s.GoPath = _goPath.Text?.Trim() ?? "";
         _s.GoplsPath = _goplsPath.Text?.Trim() ?? "";
     }

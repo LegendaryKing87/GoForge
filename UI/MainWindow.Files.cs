@@ -25,6 +25,7 @@ public partial class MainWindow
     {
         _hoverTimer.Tick += OnHoverTick;
         _completionTimer.Tick += OnCompletionTimer;
+        _sigTimer.Tick += OnSigTimer;
 
         var goExe = GoToolchain.FindExecutable("go", _s.GoPath);
         await Task.Run(() => GoToolchain.DetectEnv(goExe));
@@ -105,6 +106,7 @@ public partial class MainWindow
         SettingsStore.Save(_s);
 
         _runner.Kill();
+        _dap?.Dispose();
         _lsp?.Dispose();
     }
 
@@ -118,9 +120,17 @@ public partial class MainWindow
         tab.TextSettled += OnTextSettled;
 
         var ed = tab.Editor;
-        ed.TextArea.Caret.PositionChanged += (_, _) => { if (ReferenceEquals(Current, tab)) UpdateStatus(); };
+        ed.TextArea.Caret.PositionChanged += (_, _) =>
+        {
+            if (ReferenceEquals(Current, tab)) UpdateStatus();
+            HideSignatureIfMoved(tab);
+        };
         ed.Document.TextChanged += (_, _) => { if (ReferenceEquals(Current, tab)) UpdateTitle(); };
-        ed.TextArea.TextEntered += (_, e) => OnTextEnteredForCompletion(tab, e.Text);
+        ed.TextArea.TextEntered += (_, e) =>
+        {
+            OnTextEnteredForCompletion(tab, e.Text);
+            OnTextEnteredForSignature(tab, e.Text);
+        };
 
         ed.AddHandler(PointerWheelChangedEvent, (object? _, PointerWheelEventArgs e) =>
         {
@@ -151,6 +161,9 @@ public partial class MainWindow
 
         _editors.Add(tab);
         _tabs.Items.Add(tab.Item);
+
+        tab.BreakpointClicked += ToggleBreakpoint;
+        tab.SetBreakpoints(BreakpointsFor(tab.FilePath));
 
         if (_lsp != null && tab.IsGo && tab.FilePath != null)
         {
@@ -268,6 +281,7 @@ public partial class MainWindow
         BuildTree(null);
         UpdateWelcome();
         UpdateTitle();
+        Fire(RefreshGitAsync);
         if (restartLsp) await StartLspAsync();
     }
 
@@ -281,10 +295,18 @@ public partial class MainWindow
     {
         if (tab.FilePath == null) return await SaveAsAsync(tab);
 
-        if (format && _s.FormatOnSave && tab.IsGo)
+        if (format && tab.IsGo)
         {
-            try { await FormatTabAsync(tab, quiet: true); }
-            catch { /* never block saving on a formatter failure */ }
+            if (_s.OrganizeImportsOnSave)
+            {
+                try { await OrganizeImportsAsync(tab, quiet: true); }
+                catch { /* never block saving on gopls failures */ }
+            }
+            if (_s.FormatOnSave)
+            {
+                try { await FormatTabAsync(tab, quiet: true); }
+                catch { /* never block saving on a formatter failure */ }
+            }
         }
 
         try
@@ -304,6 +326,7 @@ public partial class MainWindow
             _lsp.DidSave(tab.FilePath);
         }
         if (ReferenceEquals(Current, tab)) UpdateTitle();
+        Fire(RefreshGitAsync);
         return true;
     }
 
@@ -327,6 +350,7 @@ public partial class MainWindow
         if (wasOpenInLsp && _lsp != null) _lsp.DidClose(tab.FilePath!);
 
         tab.SetPath(PathUtil.Norm(path));
+        tab.SetBreakpoints(BreakpointsFor(tab.FilePath));
         tab.LspOpen = false;
         bool ok = await SaveTabAsync(tab, format: true);
 
@@ -413,7 +437,7 @@ public partial class MainWindow
         }
     }
 
-    static Control TreeHeader(string badge, string badgeColor, string name)
+    static Control TreeHeader(string badge, string badgeColor, string name, IBrush? nameBrush = null)
     {
         var sp = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         sp.Children.Add(new TextBlock
@@ -425,7 +449,9 @@ public partial class MainWindow
             MinWidth = 24,
             VerticalAlignment = VerticalAlignment.Center
         });
-        sp.Children.Add(new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center });
+        var label = new TextBlock { Text = name, VerticalAlignment = VerticalAlignment.Center };
+        if (nameBrush != null) label.Foreground = nameBrush; // never assign null: it would hide the text
+        sp.Children.Add(label);
         return sp;
     }
 
@@ -434,7 +460,7 @@ public partial class MainWindow
         var name = isRoot ? Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) : Path.GetFileName(path);
         if (string.IsNullOrEmpty(name)) name = path;
 
-        var item = new TreeViewItem { Header = TreeHeader("▸", "#8AA4B8", name), Tag = path };
+        var item = new TreeViewItem { Header = TreeHeader("▸", "#8AA4B8", name, GitDirBrush(path)), Tag = path };
         item.Items.Add(new TreeViewItem { Header = "…", Tag = "__ph" });
 
         bool loaded = false;
@@ -475,7 +501,7 @@ public partial class MainWindow
             _ => ("·", "#808080")
         };
 
-        var item = new TreeViewItem { Header = TreeHeader(badge, color, name), Tag = path };
+        var item = new TreeViewItem { Header = TreeHeader(badge, color, name, GitFileBrush(path)), Tag = path };
         var menu = new ContextMenu();
         menu.Items.Add(MI("Open", () => Fire(() => OpenFileAsync(path))));
         menu.Items.Add(new Separator());

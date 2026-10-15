@@ -24,7 +24,12 @@ public sealed class LspClient : IDisposable
     public event Action<string>? Message;
     /// <summary>Work-done progress from gopls ("Loading packages…"); null when it finished.</summary>
     public event Action<string?>? Progress;
+    /// <summary>The server asked us to apply a workspace edit (e.g. after executing a command).</summary>
+    public event Action<Dictionary<string, List<LspTextEdit>>>? EditRequested;
     public event Action? Exited;
+
+    /// <summary>Error message of the most recent failed response, or null if it succeeded.</summary>
+    public string? LastError { get; private set; }
 
     // ---------------------------------------------------------------- lifecycle
 
@@ -86,12 +91,37 @@ public sealed class LspClient : IDisposable
                         ["references"] = new JsonObject(),
                         ["formatting"] = new JsonObject(),
                         ["documentSymbol"] = new JsonObject { ["hierarchicalDocumentSymbolSupport"] = false },
-                        ["publishDiagnostics"] = new JsonObject()
+                        ["publishDiagnostics"] = new JsonObject(),
+                        ["codeAction"] = new JsonObject
+                        {
+                            ["isPreferredSupport"] = true,
+                            ["codeActionLiteralSupport"] = new JsonObject
+                            {
+                                ["codeActionKind"] = new JsonObject
+                                {
+                                    ["valueSet"] = new JsonArray(
+                                        "quickfix", "refactor", "refactor.extract", "refactor.inline",
+                                        "refactor.rewrite", "source", "source.organizeImports", "source.fixAll")
+                                }
+                            }
+                        },
+                        ["rename"] = new JsonObject { ["prepareSupport"] = false },
+                        ["signatureHelp"] = new JsonObject
+                        {
+                            ["signatureInformation"] = new JsonObject
+                            {
+                                ["documentationFormat"] = new JsonArray("plaintext"),
+                                ["parameterInformation"] = new JsonObject { ["labelOffsetSupport"] = true }
+                            }
+                        }
                     },
                     ["workspace"] = new JsonObject
                     {
                         ["configuration"] = true,
-                        ["workspaceFolders"] = true
+                        ["workspaceFolders"] = true,
+                        ["applyEdit"] = true,
+                        ["workspaceEdit"] = new JsonObject { ["documentChanges"] = true },
+                        ["executeCommand"] = new JsonObject()
                     }
                 },
                 ["workspaceFolders"] = new JsonArray(new JsonObject
@@ -276,6 +306,12 @@ public sealed class LspClient : IDisposable
                 for (int i = 0; i < count; i++) arr.Add(new JsonObject());
                 result = arr;
             }
+            if (method == "workspace/applyEdit")
+            {
+                var edit = ParseEdit(obj["params"]?["edit"]);
+                if (edit != null) EditRequested?.Invoke(edit);
+                result = new JsonObject { ["applied"] = edit != null };
+            }
             _ = SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = idNode.DeepClone(), ["result"] = result });
             return;
         }
@@ -309,6 +345,7 @@ public sealed class LspClient : IDisposable
 
         if (idNode != null && idNode is JsonValue v && v.TryGetValue<int>(out var id) && _pending.TryGetValue(id, out var tcs))
         {
+            LastError = obj["error"] != null ? (Str(obj["error"]?["message"]) ?? "request failed") : null;
             tcs.TrySetResult(obj["error"] != null ? null : obj["result"]);
         }
     }
@@ -330,7 +367,7 @@ public sealed class LspClient : IDisposable
                 if (s == null || e == null) continue;
                 list.Add(new LspDiagnostic(
                     Int(s["line"]), Int(s["character"]), Int(e["line"]), Int(e["character"]),
-                    Math.Max(1, Int(o["severity"])), Str(o["message"]) ?? "", Str(o["source"])));
+                    Math.Max(1, Int(o["severity"])), Str(o["message"]) ?? "", Str(o["source"]), o.ToJsonString()));
             }
         }
         DiagnosticsPublished?.Invoke(PathUtil.FromUri(uri), list);
@@ -440,6 +477,163 @@ public sealed class LspClient : IDisposable
         var list = new List<LspSymbol>();
         if (res is JsonArray arr) FlattenSymbols(arr, null, list);
         return list;
+    }
+
+    // ---------------------------------------------------------------- code actions, rename, signature help
+
+    static LspTextEdit? ParseTextEdit(JsonNode? n)
+    {
+        if (n is not JsonObject o || o["range"] is not JsonObject r) return null;
+        var s = r["start"] as JsonObject;
+        var e = r["end"] as JsonObject;
+        if (s == null || e == null) return null;
+        return new LspTextEdit(Int(s["line"]), Int(s["character"]), Int(e["line"]), Int(e["character"]), Str(o["newText"]) ?? "");
+    }
+
+    /// <summary>Parses a WorkspaceEdit (changes and documentChanges) into path -> edits. Only text edits are supported.</summary>
+    static Dictionary<string, List<LspTextEdit>>? ParseEdit(JsonNode? n)
+    {
+        if (n is not JsonObject o) return null;
+        var result = new Dictionary<string, List<LspTextEdit>>(PathUtil.Cmp);
+
+        void Add(string uri, JsonNode? edits)
+        {
+            if (edits is not JsonArray arr || string.IsNullOrEmpty(uri)) return;
+            var path = PathUtil.FromUri(uri);
+            if (!result.TryGetValue(path, out var list)) result[path] = list = new List<LspTextEdit>();
+            foreach (var e in arr)
+            {
+                var te = ParseTextEdit(e);
+                if (te != null) list.Add(te);
+            }
+        }
+
+        if (o["changes"] is JsonObject changes)
+            foreach (var kv in changes) Add(kv.Key, kv.Value);
+
+        if (o["documentChanges"] is JsonArray docChanges)
+            foreach (var d in docChanges)
+                if (d is JsonObject dobj && dobj["textDocument"] is JsonObject td && dobj["edits"] != null)
+                    Add(Str(td["uri"]) ?? "", dobj["edits"]);
+
+        return result;
+    }
+
+    public async Task<List<LspCodeAction>> CodeActionAsync(
+        string path, int line, int col, int endLine, int endCol, IEnumerable<string?>? diagnosticsRaw, string[]? only)
+    {
+        var diags = new JsonArray();
+        if (diagnosticsRaw != null)
+        {
+            foreach (var raw in diagnosticsRaw)
+            {
+                if (raw == null) continue;
+                try
+                {
+                    var node = JsonNode.Parse(raw);
+                    if (node != null) diags.Add(node);
+                }
+                catch { /* skip malformed */ }
+            }
+        }
+
+        var ctx = new JsonObject { ["diagnostics"] = diags };
+        if (only != null)
+        {
+            var arr = new JsonArray();
+            foreach (var k in only) arr.Add(k);
+            ctx["only"] = arr;
+        }
+
+        var p = new JsonObject
+        {
+            ["textDocument"] = Doc(path),
+            ["range"] = new JsonObject
+            {
+                ["start"] = new JsonObject { ["line"] = line, ["character"] = col },
+                ["end"] = new JsonObject { ["line"] = endLine, ["character"] = endCol }
+            },
+            ["context"] = ctx
+        };
+
+        var res = await RequestAsync("textDocument/codeAction", p);
+        var list = new List<LspCodeAction>();
+        if (res is not JsonArray items) return list;
+
+        foreach (var it in items)
+        {
+            if (it is not JsonObject o) continue;
+            var title = Str(o["title"]);
+            if (string.IsNullOrEmpty(title) || o["disabled"] != null) continue;
+
+            if (o["command"] is JsonValue)
+            {
+                // a bare Command
+                list.Add(new LspCodeAction(title, null, null, Str(o["command"]), o["arguments"]?.DeepClone(), false));
+                continue;
+            }
+
+            string? command = null;
+            JsonNode? args = null;
+            if (o["command"] is JsonObject co)
+            {
+                command = Str(co["command"]);
+                args = co["arguments"]?.DeepClone();
+            }
+            bool preferred = o["isPreferred"] is JsonValue pv && pv.TryGetValue<bool>(out var b) && b;
+            list.Add(new LspCodeAction(title, Str(o["kind"]), ParseEdit(o["edit"]), command, args, preferred));
+        }
+        return list;
+    }
+
+    public async Task ExecuteCommandAsync(string command, JsonNode? args)
+    {
+        var p = new JsonObject
+        {
+            ["command"] = command,
+            ["arguments"] = args?.DeepClone() ?? new JsonArray()
+        };
+        await RequestAsync("workspace/executeCommand", p, 30000);
+    }
+
+    public async Task<Dictionary<string, List<LspTextEdit>>?> RenameAsync(string path, int line, int col, string newName)
+    {
+        var p = DocPos(path, line, col);
+        p["newName"] = newName;
+        var res = await RequestAsync("textDocument/rename", p, 60000);
+        return ParseEdit(res);
+    }
+
+    public async Task<LspSignature?> SignatureHelpAsync(string path, int line, int col)
+    {
+        var res = await RequestAsync("textDocument/signatureHelp", DocPos(path, line, col), 8000);
+        if (res is not JsonObject o || o["signatures"] is not JsonArray sigs || sigs.Count == 0) return null;
+
+        int active = Int(o["activeSignature"]);
+        if (active < 0 || active >= sigs.Count) active = 0;
+        if (sigs[active] is not JsonObject sig) return null;
+
+        var label = Str(sig["label"]);
+        if (string.IsNullOrEmpty(label)) return null;
+
+        int activeParam = o["activeParameter"] != null ? Int(o["activeParameter"]) : Int(sig["activeParameter"]);
+        var ranges = new List<(int Start, int End)>();
+        if (sig["parameters"] is JsonArray ps)
+        {
+            foreach (var pn in ps)
+            {
+                var lbl = (pn as JsonObject)?["label"];
+                if (lbl is JsonArray pair && pair.Count == 2)
+                    ranges.Add((Int(pair[0]), Int(pair[1])));
+                else if (Str(lbl) is { } text)
+                {
+                    int idx = label.IndexOf(text, StringComparison.Ordinal);
+                    ranges.Add(idx >= 0 ? (idx, idx + text.Length) : (-1, -1));
+                }
+                else ranges.Add((-1, -1));
+            }
+        }
+        return new LspSignature(label, Markup(sig["documentation"]), activeParam, ranges);
     }
 
     static void FlattenSymbols(JsonArray arr, string? container, List<LspSymbol> list)

@@ -37,6 +37,12 @@ dotnet publish -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=tru
 - Go tooling: run, run file, build, build executable, install, test (all / package / coverage / race),
   vet, mod init / tidy, get, generate, fmt — output streams live, `file.go:12:3` lines are clickable,
   compiler errors feed the Problems panel, stdin box sends input to the running program
+- Refactoring through gopls: organize imports (also on save), quick fixes and code actions (Ctrl+.),
+  rename symbol across the project (F2), signature help while typing call arguments
+- Debugging with Delve (DAP): breakpoints in the gutter (persisted per file), step over / into / out,
+  call stack, expandable variables, value-on-hover while paused, program output in the Output panel
+- Git: current branch, ahead/behind and change count in the status bar; modified, added, untracked and
+  deleted files are coloured in the Explorer
 - Format on save (gopls, falling back to gofmt), save-before-run, session restore, recent folders
 - Settings dialog (theme, font, tab width, word wrap, whitespace, tool paths) and an About dialog
 
@@ -53,10 +59,14 @@ dotnet publish -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=tru
 | Build / Test / Test package                     | Ctrl+Shift+B / Ctrl+T / Ctrl+Shift+T              |
 | Go to Definition / References                   | F12 / Shift+F12                                   |
 | Completion                                      | Ctrl+Space (also after typing `.`)                |
-| Format document                                 | Shift+Alt+F                                       |
+| Format document / Organize imports | Shift+Alt+F / Shift+Alt+O |
 | Toggle comment / duplicate / delete / move line | Ctrl+/ / Ctrl+D / Ctrl+Shift+K / Alt+Up, Alt+Down |
 | Toggle Explorer / Output panel                  | Ctrl+B / Ctrl+J                                   |
 | Zoom in / out / reset                           | Ctrl+= / Ctrl+- / Ctrl+0                          |
+| Quick fix / Rename symbol | Ctrl+. / F2 |
+| Start or continue debugging / Stop | F6 / Shift+F6 |
+| Step over / into / out | F10 / F11 / Shift+F11 |
+| Toggle breakpoint | F9 (or click the gutter) |
 | Settings                                        | Ctrl+,                                            |
 
 ## Project layout
@@ -72,10 +82,13 @@ UI/                 MainWindow (layout + menus), .Files, .Go, .Lsp partials
 
 The UI is built in code (no XAML), so there is nothing to keep in sync with generated fields.
 
-## Not included
+## Limitations
 
-A debugger (Delve), refactoring such as rename-symbol across files, and snippet completion.
-Git integration is also not included.
+- Debugging needs Delve (`Go > Install Delve`). Delve's DAP mode has no console input, so programs that read
+  from stdin should be run with F5 instead. GUI and server programs debug fine.
+- Breakpoints are stored by line number and do not follow the line when you insert or delete text above them.
+- Rename and other multi-file edits open the affected files as unsaved tabs, so you can review and undo them.
+- Not included: snippet completion, a built-in terminal, and Git operations (commit, diff, branches).
 
 ## Notes
 
